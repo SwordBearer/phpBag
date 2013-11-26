@@ -1,13 +1,12 @@
 <?php
 /**
  * Mysql的封装类：包括增删改查操作
- * @author SwordBearer e-mail:ranxiedao@163.com
- * @date 2013-11-15
  *
  */
 class MySqlEngine{
 	private $conn;
 	private $host;
+	private $port;
 	private $user;
 	private $password;
 	private $database;
@@ -26,13 +25,14 @@ class MySqlEngine{
 
 	function __construct($config=array()){
 		$this->host=$config['host'];
+		$this->port=$config['port'];
 		$this->user=$config['user'];
 		$this->password=$config['password'];
 		$this->database=$config['database'];
 	}
 
 	private function connect(){
-		$this->conn=mysql_connect($this->host,$this->user,$this->password);
+		$this->conn=mysql_connect($this->host.':'.$this->port,$this->user,$this->password);
 		if(!$this->conn){ //连接出错
 			throw new Exception('MySql could not connect: '.mysql_error());
 		}
@@ -75,10 +75,7 @@ class MySqlEngine{
 		mysql_query($sql,$this->getConnection());
 		return mysql_insert_id($this->getConnection());
 	}
-	
-	/*
-	 * 2013-11-11 新增mysql的封装
-	 */
+
 	/**
 	 * 设置查询条件中的 AND 条件
 	 * @param Array $conditions eg: whereAnd(array('playerId=3',"serverId like 'server'") 
@@ -164,8 +161,7 @@ class MySqlEngine{
 	 */
 	public function selectWithCount($tblName,$columns=array()){
 		$opt=$this->options;
-		unset($this->options[self::OPTION_OFFSET]);
-		unset($this->options[self::OPTION_LENGTH]);
+		unset($this->options);
 		$count=$this->count($tblName);
 		$this->options=$opt;
 		$data=$this->select($tblName,$columns);
@@ -210,7 +206,7 @@ class MySqlEngine{
 	public function query($sqlStr){
 		$result=mysql_query($sqlStr,$this->getConnection());
 		if(!$result){
-			throw new Exception('MySql query failed '.mysql_error());
+			throw new Exception('MySql query failed '.mysql_error().'   SQL:'.$sqlStr);
 		}
 		return $result;
 	}
@@ -354,6 +350,7 @@ class MySqlEngine{
 	 * @param Array $data eg: ('id'=>'1','name'=>'test')
 	 */
 	private function buildInsertValues($data){
+		$this->getConnection();//必须要先连接数据库才能使用 mysql_real_escape_string()方法
 		$keys=array_keys($data);
 		$values=array_values($data);
 		
@@ -363,8 +360,10 @@ class MySqlEngine{
 			if(is_numeric($tmp)){
 			}else if(is_array($tmp)){
 				$tmp=json_encode($tmp);
+				$tmp=mysql_real_escape_string($tmp);
 				$tmp='\''.$tmp.'\'';
 			}else{
+				$tmp=mysql_real_escape_string($tmp);
 				$tmp='\''.$tmp.'\'';
 			}
 			$valueStr.=$tmp.',';
@@ -379,18 +378,21 @@ class MySqlEngine{
 	 * @param Array $data eg: ('id'=>'1','name'=>'test')
 	 */
 	private function buildUpdateValues($data){
+		$this->getConnection();//必须要先连接数据库才能使用 mysql_real_escape_string()方法
 		$str=' set ';
 		foreach($data as $key=>$value){
 			if(is_numeric($value)){
-				$str.=$key.'='.$value.',';
+				$tmp.=$key.'='.$value.',';
 			}else if(is_array($value)){
-				$str.=$key.'=\''.json_encode($value).'\',';
+				$value=json_encode($value);
+				$value=mysql_real_escape_string($value);
+				$tmp.=$key.'=\''.$value.'\',';
 			}else{
-				$str.=$key.'=\''.$value.'\',';
+				$value=mysql_real_escape_string($value);
+				$tmp.=$key.'=\''.$value.'\',';
 			}
 		}
-		$str=trim($str,',');
-		
+		$str=trim($tmp,',');
 		return $str;
 	}
 }
