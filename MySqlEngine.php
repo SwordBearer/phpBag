@@ -6,7 +6,6 @@
 class MySqlEngine{
 	private $conn;
 	private $host;
-	private $port;
 	private $user;
 	private $password;
 	private $database;
@@ -25,20 +24,31 @@ class MySqlEngine{
 
 	function __construct($config=array()){
 		$this->host=$config['host'];
-		$this->port=$config['port'];
 		$this->user=$config['user'];
 		$this->password=$config['password'];
 		$this->database=$config['database'];
 	}
 
+	public function beginTranscation(){
+		$this->query('BEGIN');
+	}
+
+	public function rollbackTranscation(){
+		$this->query('ROLLBACK');
+	}
+
+	public function commitTranscation(){
+		$this->query('COMMIT');
+	}
+
 	private function connect(){
-		$this->conn=mysql_connect($this->host.':'.$this->port,$this->user,$this->password);
+		$this->conn=mysql_connect($this->host,$this->user,$this->password);
 		if(!$this->conn){ //连接出错
-			throw new Exception('MySql could not connect: '.mysql_error());
+			ExceptionUtil::throwException(ExceptionUtil::ERR_99201,'MySql could not connect: '.mysql_error());
 		}
 		$result=mysql_select_db($this->database,$this->conn);
 		if(!$result){
-			throw new Exception('MySql could not find database: '.$this->database.'  '.mysql_error());
+			ExceptionUtil::throwException(ExceptionUtil::ERR_99202,'MySql could not find database: '.$this->database.'  '.mysql_error());
 		}
 		$this->isConnected=true;
 	}
@@ -46,7 +56,7 @@ class MySqlEngine{
 	private function getConnection(){
 		if(!$this->isConnected){
 			$this->connect();
-			mysql_query("SET names UTF8");
+			mysql_query("SET names UTF8;");
 		}
 		return $this->conn;
 	}
@@ -72,6 +82,8 @@ class MySqlEngine{
 			$sql='INSERT INTO '.$tblName;
 			$sql.=$this->buildInsertValues($data);
 		}
+		$sql.=';';
+		pdm_log('saveModel sql:['.$sql.']');
 		mysql_query($sql,$this->getConnection());
 		return mysql_insert_id($this->getConnection());
 	}
@@ -142,14 +154,17 @@ class MySqlEngine{
 	 * @param Array $columns 需要得到的字段：如果为null,则获取所有字段
 	 * @return Array
 	 */
-	public function select($tblName,$columns=array()){
+	public function select($tblName,$columns=array(),$asArray=true){
 		$querySQL=$this->buildQuerySQL($tblName,$columns);
 		$result=$this->query($querySQL);
+		$this->clear();
+		if(!$asArray){
+			return $result;
+		}
 		$data=array();
 		while($row=mysql_fetch_array($result,MYSQL_ASSOC)){
 			$data[]=$row;
 		}
-		$this->clear();
 		return $data;
 	}
 
@@ -206,7 +221,7 @@ class MySqlEngine{
 	public function query($sqlStr){
 		$result=mysql_query($sqlStr,$this->getConnection());
 		if(!$result){
-			throw new Exception('MySql query failed '.mysql_error().'   SQL:'.$sqlStr);
+			ExceptionUtil::throwException(ExceptionUtil::ERR_99203,'MySql query failed '.mysql_error().'   SQL:'.$sqlStr);
 		}
 		return $result;
 	}
@@ -350,7 +365,7 @@ class MySqlEngine{
 	 * @param Array $data eg: ('id'=>'1','name'=>'test')
 	 */
 	private function buildInsertValues($data){
-		$this->getConnection();//必须要先连接数据库才能使用 mysql_real_escape_string()方法
+		$this->getConnection(); //必须要先连接数据库才能使用 mysql_real_escape_string()方法
 		$keys=array_keys($data);
 		$values=array_values($data);
 		
@@ -378,7 +393,7 @@ class MySqlEngine{
 	 * @param Array $data eg: ('id'=>'1','name'=>'test')
 	 */
 	private function buildUpdateValues($data){
-		$this->getConnection();//必须要先连接数据库才能使用 mysql_real_escape_string()方法
+		$this->getConnection(); //必须要先连接数据库才能使用 mysql_real_escape_string()方法
 		$str=' set ';
 		foreach($data as $key=>$value){
 			if(is_numeric($value)){
@@ -392,7 +407,7 @@ class MySqlEngine{
 				$tmp.=$key.'=\''.$value.'\',';
 			}
 		}
-		$str=trim($tmp,',');
+		$str.=trim($tmp,',');
 		return $str;
 	}
 }
